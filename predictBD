@@ -1,0 +1,112 @@
+predictBD <- function(input) {
+
+  all.data<-data.table(as.data.frame(input))
+
+  mean_disp_price=mean(all.data$price_with_discount, na.rm=T)
+  sd_mean_disp_price=sd(all.data$price_with_discount, na.rm=T)
+  all.data<-all.data[ ,':='(
+                             condition2=as.character(gsub('[[:punct:]]','',tolower(condition))),
+                             shop2=as.character(gsub('[[:punct:]]','',tolower(shop))),
+                             brand_name2=gsub('[[:punct:]]','',tolower(brand_name)),
+                             title2=strsplit(gsub('[[:punct:]]',' ',tolower(title)), "\\s+"),
+                             query2=strsplit(gsub('[[:punct:]]',' ',tolower(query_text)), "\\s+"),
+                             discount=(price_without_discount-price_with_discount)/price_without_discount,
+                             log_price=log(price_with_discount)), by=id][ ,':='(price_diff_meanpricecat_displayed_price=(price_with_discount-mean_disp_price)/price_with_discount,
+                             match_sum_unique_relative1=sum(stringdist::ain(unique(query2[[1]]),unique(title2[[1]]), method = "dl",maxDist=1))/length(unique(query2[[1]])),
+                             price2=as.character(findInterval(price_with_discount, c(0.00001, 10, 20, 50, 100, 200, 300, 500, 750, 1000, 1500, 2000, 3000, 5000))),
+                             discount2=as.character(findInterval(discount, c(0.00001, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)))),  by=id ]
+  # Text features
+  title3<-unlist(all.data$title2)
+  frequency <- names(sort(table(title3), decreasing=T)[1:5])
+  #FIND TITLES WITH FREQUENT W1-W5
+
+  top10<- subset(all.data,position_in_api_responce < 11)
+  mmm<-mean(top10$price_with_discount, na.rm=T)
+  title3<-unlist(top10$title2)
+  frequencyz <- sort(table(title3), decreasing=T)[1:5]
+  frequency2 <- names(frequencyz)
+  if (is.null(frequency2)==T) {
+    frequency2<-NA}
+  w1_t10_prob=frequencyz[1]/sum(frequencyz, na.rm=T)
+  w2_t10_prob=frequencyz[2]/sum(frequencyz, na.rm=T)
+  w3_t10_prob=frequencyz[3]/sum(frequencyz, na.rm=T)
+  w4_t10_prob=frequencyz[4]/sum(frequencyz, na.rm=T)
+  w5_t10_prob=frequencyz[5]/sum(frequencyz, na.rm=T)
+
+  brands3<-unlist(top10$brand_name2)
+  frequency_brands1<-sort(table(brands3), decreasing=T)[1:5]
+  frequency_brands2<-names(frequency_brands1)
+  if (is.null(frequency_brands2)==T) {
+    frequency_brands2<-NA}
+  brand1_t10_prob=frequency_brands1[1]/sum(frequency_brands1, na.rm=T)
+  brand2_t10_prob=frequency_brands1[2]/sum(frequency_brands1, na.rm=T)
+  brand3_t10_prob=frequency_brands1[3]/sum(frequency_brands1, na.rm=T)
+  brand4_t10_prob=frequency_brands1[4]/sum(frequency_brands1, na.rm=T)
+  brand5_t10_prob=frequency_brands1[5]/sum(frequency_brands1, na.rm=T)
+
+  all.data<-all.data[ ,':='(
+      w1_b=ifelse(frequency[1]  %in% unique(title2[[1]]) == T, 1 ,0),
+      w2_b=ifelse(frequency[2]  %in% unique(title2[[1]]) == T, 1 ,0),
+      w3_b=ifelse(frequency[3]  %in% unique(title2[[1]]) == T, 1 ,0),
+      w4_b=ifelse(frequency[4]  %in% unique(title2[[1]]) == T, 1 ,0),
+      w5_b=ifelse(frequency[5]  %in% unique(title2[[1]]) == T, 1 ,0),
+      w1_t10_b=ifelse((frequency2[1] %in% unique(title2[[1]]) == T), w1_t10_prob ,0),
+      w2_t10_b=ifelse((frequency2[2] %in% unique(title2[[1]]) == T), w2_t10_prob ,0),
+      w3_t10_b=ifelse((frequency2[3] %in% unique(title2[[1]]) == T), w3_t10_prob ,0),
+      w4_t10_b=ifelse((frequency2[4] %in% unique(title2[[1]]) == T), w4_t10_prob ,0),
+      w5_t10_b=ifelse((frequency2[5] %in% unique(title2[[1]]) == T), w5_t10_prob ,0),
+      pricediff_top10=(price_with_discount-mmm)/price_with_discount,
+      brand1_t10_b=ifelse(( frequency_brands2[1] %in% brand_name2 == T), brand1_t10_prob ,0),
+      brand2_t10_b=ifelse(( frequency_brands2[2] %in% brand_name2 == T), brand2_t10_prob ,0),
+      brand3_t10_b=ifelse(( frequency_brands2[3] %in% brand_name2 == T), brand3_t10_prob ,0),
+      brand4_t10_b=ifelse(( frequency_brands2[4] %in% brand_name2 == T), brand4_t10_prob ,0),
+      brand5_t10_b=ifelse(( frequency_brands2[5] %in% brand_name2 == T), brand5_t10_prob ,0),
+      mean_query_price=mean_disp_price,
+      sd_query_price=sd_mean_disp_price), by=id ]
+
+  all.data$title2<-NULL
+  all.data$query2<-NULL
+
+  setkey(all.data, match_sum_unique_relative1)
+  all.data<-match_sum_unique_relative1_ctr_data[all.data]
+
+  setkey(all.data,query_text)
+  all.data<-query_data[all.data]
+
+  setkey(all.data,id)
+  all.data<-product_data[all.data]
+
+  setkey(all.data,brand_name2)
+  all.data<-brand_data[all.data]
+
+  setkey(all.data,shop2)
+  all.data<-shop_data[all.data]
+
+  setkey(all.data,price2)
+  all.data<-price2_data[all.data]
+
+  setkey(all.data,position_in_api_responce)
+  all.data<-pos_api_data[all.data]
+
+  setkey(all.data, shop2, position_in_api_responce )
+  all.data<-shop2_pos_api_data[all.data]
+
+  setkey(all.data,condition2)
+  all.data<-condition_data[all.data]
+
+  setkey(all.data,discount2)
+  all.data<-discount_data[all.data]
+
+  setkey(all.data,shop2,query_text)
+  all.data<-query_and_shop2_data[all.data]
+
+  setkey(all.data, id, query_text)
+  all.data<-query_and_products_data[all.data]
+
+  setkey(all.data,query_text,brand_name2)
+  all.data<-query_and_brand_data[all.data]
+
+  rCTR<-gbm::predict.gbm(lm_inc,all.data)
+
+  return(cbind(all.data$id,rCTR))
+}
